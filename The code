@@ -1,0 +1,523 @@
+
+
+library IEEE;           --Open the main libraries
+use IEEE.STD_LOGIC_1164.ALL;            --Using the sub-libraries
+use IEEE.STD_LOGIC_ARITH.ALL;
+use IEEE.STD_LOGIC_UNSIGNED.ALL;
+
+-- Uncomment the following library declaration if using
+-- arithmetic functions with Signed or Unsigned values
+--use IEEE.NUMERIC_STD.ALL;
+
+-- Uncomment the following library declaration if instantiating
+-- any Xilinx leaf cells in this code.
+--library UNISIM;
+--use UNISIM.VComponents.all;
+
+
+
+
+entity project4 is
+    Port ( CLK100MHZ: in std_logic;
+        BTNL, BTNR, BTNU, BTND, BTNC: in std_logic;        --Push buttons
+        SWITCHES:  in STD_LOGIC_VECTOR (7 downto 0);       --Slider switches
+        LEDS:      out STD_LOGIC_VECTOR (9 downto 0);      --LEDs
+        DIGITS:    out STD_LOGIC_VECTOR (7 downto 0);      --Digits of 7-segment display
+        SEGMENTS:  out STD_LOGIC_VECTOR (7 downto 0)   );  --Segments of 7-segment display 
+end project4;
+
+
+--the code sequence is 3469
+--3='0011' 4='0100'  6='0110' 9='1001'
+architecture Behavioral of project4 is
+    TYPE state_type is (init, state1, state2, state3, state4, state5, state6, state7, state8, state9, state10,
+    wrong1, wrong2, wrong3, wrong4, wrong5, wrong6, wrong7, wrong8, wrong9, wrong10,
+    state_verify0, state_verify1,state_verify2,state_verify3,state_verify4,
+    state_pwd_length,state_reset0,state_reset1,state_reset2,state_reset3,state_reset4,state_reset5,state_reset6,state_reset7,state_reset8,state_reset9,state_reset10,state_reset_wrong, 
+    state_passed,state_not_passed,reset_complete);
+    signal state: state_type;
+    signal Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9,Q10,Q11,Q12,B1,B2,B3,B2_last,B4 :  STD_LOGIC;
+    signal input_digit: std_logic_vector (3 downto 0);
+    signal target1 : std_logic_vector(3 downto 0) :="0011";
+    signal target2 : std_logic_vector(3 downto 0) :="0100";
+    signal target3 : std_logic_vector(3 downto 0) :="0110";
+    signal target4 : std_logic_vector(3 downto 0) :="1001";
+    signal target5 : std_logic_vector(3 downto 0) :="1001";
+    signal target6 : std_logic_vector(3 downto 0) :="1001";
+    signal target7 : std_logic_vector(3 downto 0) :="1001";
+    signal target8 : std_logic_vector(3 downto 0) :="1001";
+    signal target9 : std_logic_vector(3 downto 0) :="1001";
+    signal target10 : std_logic_vector(3 downto 0) :="1001";
+    signal target11,target22,target33,target44,target55,target66,target77,target88,target99,target1010 : std_logic_vector(3 downto 0);
+    signal OK_or_Err: std_logic_vector(1 downto 0) := "00";
+    signal reset_verify_OK_or_Err: std_logic_vector(1 downto 0) := "00";
+    signal reset_OK: std_logic; 
+    signal ready_to_reset: std_logic := '0';
+    signal birthday11,birthday22,birthday33,birthday44 : std_logic_vector(3 downto 0);
+    signal birthday1 : std_logic_vector(3 downto 0) :="0000";
+    signal birthday2 : std_logic_vector(3 downto 0) :="0100";
+    signal birthday3 : std_logic_vector(3 downto 0) :="0001";
+    signal birthday4 : std_logic_vector(3 downto 0) :="0110";
+    signal pwd_length_bits : std_logic_vector(3 downto 0);
+    signal clk5000: std_logic;
+    signal count1: integer range 0 to 4999;
+    signal segment_control: integer range 0 to 2;
+    signal pwd_length: integer range 0 to 9 := 3;
+    signal pwd_length_tmp: integer range 0 to 9;
+    begin
+    
+    --button1
+    process(CLK100MHZ)
+    begin
+        IF (CLK100MHZ'event and CLK100MHZ='1') then
+            Q1 <= BTNL;
+            Q2 <= Q1;
+            Q3 <= Q2;
+        end if;
+    end process;
+    B1 <= Q1 AND Q2 AND Q3;
+
+    --button2
+    process(CLK100MHZ)
+    begin
+        IF (CLK100MHZ'event and CLK100MHZ='1') then
+            Q4 <= BTNR;
+            Q5 <= Q4;
+            Q6<= Q5;
+        end if;
+    end process;
+    B2 <= Q4 AND Q5 AND Q6;
+    
+    --button3
+    process(CLK100MHZ)
+    begin
+        IF RISING_EDGE(CLK100MHZ) then
+            Q7 <= BTNC;
+            Q8 <= Q7;
+            Q9<= Q8;
+        end if;
+    end process;
+    B3 <= Q7 AND Q8 AND Q9;
+    
+    --button3
+    process(CLK100MHZ)
+    begin
+        IF RISING_EDGE(CLK100MHZ) then
+            Q10 <= BTND;
+            Q11 <= Q10;
+            Q12<= Q11;
+        end if;
+    end process;
+    B4 <= Q10 AND Q11 AND Q12;
+     
+    --clk per 5000
+    process(CLK100MHZ)
+    begin
+        if(CLK100MHZ'event and CLK100MHZ='1') then
+            if(count1=4999) then
+                count1 <= 0;
+                clk5000 <= '1';
+            else
+                count1 <= count1 + 1;
+                clk5000 <= '0';
+            end if;
+        end if;
+    end process;
+    
+    process(clk5000)
+    begin
+        if(clk5000'event and clk5000='1') then
+            if(segment_control=2) then
+                segment_control<=0;
+            else
+                segment_control<=segment_control+1;
+            end if;
+        end if;
+    end process;
+    
+    -- state control
+    process(CLK100MHZ)
+    begin
+        if(rising_edge(CLK100MHZ)) then
+            if(B1='1') then
+                state <= init;
+                leds(9 downto 0) <= "0000000001";
+            elsif(B3='1') then --display ready to reset pwd
+                state <= state_verify0;
+                leds(9 downto 0) <= "1010101010";
+            elsif(B2='1') then
+                if(B2_last='0') then
+                    case state is
+                    when state_passed =>
+                                state <= init;
+                                leds(9 downto 0) <= "0000000001";
+                    when state_not_passed =>
+                                state <= init;
+                                leds(9 downto 0) <= "0000000001";
+                    when reset_complete =>
+                                ready_to_reset<='0';
+                                state <= init;
+                                leds(9 downto 0) <= "0000000001";
+                    when init => if(switches(3 downto 0)= target1) THEN state <= state1;
+                                else state <= wrong1;
+                                end if;
+                                leds(9 downto 0) <= "1000000000";
+                    when state1 => if(switches(3 downto 0)= target2) THEN state <= state2;
+                                else state <= wrong2;
+                                end if;    
+                                leds(9 downto 0) <= "1100000000";   
+                    when state2 => if(switches(3 downto 0)= target3) THEN state <= state3;
+                                else state <= wrong3;
+                                end if ; 
+                                leds(9 downto 0) <= "1110000000";     
+                    when state3 => if(switches(3 downto 0)= target4) THEN state <= state4;
+                                else state <= wrong4;
+                                end if;
+                                leds(9 downto 0) <= "1111000000";
+                    when state4 => if(switches(3 downto 0)= target5 and pwd_length>=4) THEN state <= state5;
+                                    leds(9 downto 0) <= "1111100000"; 
+                                elsif(pwd_length<4) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong5;
+                                end if;
+                    when state5 => if(switches(3 downto 0)= target6 and pwd_length>=5) THEN state <= state6;
+                                    leds(9 downto 0) <= "1111110000"; 
+                                elsif(pwd_length<5) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong6;
+                                end if;
+                    when state6 => if(switches(3 downto 0)= target7 and pwd_length>=6) THEN state <= state7;
+                                    leds(9 downto 0) <= "1111111000"; 
+                                elsif(pwd_length<6) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong7;
+                                end if;
+                    when state7 => if(switches(3 downto 0)= target8 and pwd_length>=7) THEN state <= state8;
+                                    leds(9 downto 0) <= "1111111100"; 
+                                elsif(pwd_length<7) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong8;
+                                end if;
+                    when state8 => if(switches(3 downto 0)= target9 and pwd_length>=8) THEN state <= state9;
+                                    leds(9 downto 0) <= "1111111110"; 
+                                elsif(pwd_length<8) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong9;
+                                end if;
+                    when state9 => if(switches(3 downto 0)= target10) then state <= state_passed;
+                                    leds(9 downto 0) <= "0000000001"; 
+                                else state <= wrong10;
+                                end if;
+                                                                              
+                    WHEN wrong1 => state <= wrong2; 
+                                leds(9 downto 0) <= "1100000000";      
+                    WHEN wrong2 => state <= wrong3;  
+                                leds(9 downto 0) <= "1110000000";      
+                    WHEN wrong3 => state <= wrong4;
+                                leds(9 downto 0) <= "1111000000";                   
+                    WHEN wrong4 => if(pwd_length<4) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111100000";
+                                state <= wrong5;
+                                end if;
+                    WHEN wrong5 => if(pwd_length<5) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111110000";
+                                state <= wrong6;
+                                end if;
+                    WHEN wrong6 => if(pwd_length<6) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111111000";
+                                state <= wrong7;
+                                end if;
+                    WHEN wrong7 => if(pwd_length<7) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111111100";
+                                state <= wrong8;
+                                end if;
+                    WHEN wrong8 => if(pwd_length<8) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111111110";
+                                state <= wrong9;
+                                end if;
+                    WHEN wrong9 => if(pwd_length<9) then
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                                else leds(9 downto 0) <= "1111111111";
+                                state <= wrong10;
+                                end if;
+                    WHEN wrong10 => 
+                                state <= state_not_passed;
+                                leds(9 downto 0) <= "1111111111";
+                    WHEN state_verify0 => birthday11 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_verify1;
+                        leds(9 downto 0) <= "1000000000";
+                    WHEN state_verify1 => birthday22 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_verify2;
+                        leds(9 downto 0) <= "1100000000";
+                    WHEN state_verify2 => birthday33 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_verify3;
+                        leds(9 downto 0) <= "1110000000";
+                    WHEN state_verify3 => birthday44 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_verify4;
+                        leds(9 downto 0) <= "1111000000";
+                    WHEN state_verify4 => 
+                        if(birthday11=birthday1 and birthday22=birthday2 and birthday33=birthday3 and birthday44=birthday4) then --OK to reset password
+                            state <= state_pwd_length;
+                            leds(9 downto 0) <= "0000110000";
+                        else
+                            leds(9 downto 0) <= "1100000011";
+                            state <= state_reset_wrong;
+                        end if;
+                    WHEN state_reset_wrong =>
+                        state <= state_verify0;
+                        leds(9 downto 0) <= "1010101010";
+                    WHEN state_pwd_length =>
+                        pwd_length_bits <= SWITCHES(3 DOWNTO 0);
+                        state <= state_reset0;
+                    WHEN state_reset0 => target11 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_reset1;
+                        leds(9 downto 0) <= "1000000000";
+                    WHEN state_reset1 => target22 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_reset2;
+                        leds(9 downto 0) <= "1100000000";
+                    WHEN state_reset2 => target33 <= SWITCHES(3 DOWNTO 0);
+                        state <= state_reset3;
+                        leds(9 downto 0) <= "1110000000";
+                    WHEN state_reset3 => target44 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=3) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset4;
+                            leds(9 downto 0) <= "1111000000";
+                        end if;
+                    WHEN state_reset4 => target55 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=4) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset5;
+                            leds(9 downto 0) <= "1111100000";
+                        end if;
+                    WHEN state_reset5 => target66 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=5) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset6;
+                            leds(9 downto 0) <= "1111110000";
+                        end if;
+                    WHEN state_reset6 => target77 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=6) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset7;
+                            leds(9 downto 0) <= "1111111000";
+                        end if;
+                    WHEN state_reset7 => target88 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=7) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset8;
+                            leds(9 downto 0) <= "1111111100";
+                        end if;
+                    WHEN state_reset8 => target99 <= SWITCHES(3 DOWNTO 0);
+                        if(pwd_length<=8) then
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                        else
+                            state <= state_reset9;
+                            leds(9 downto 0) <= "1111111110";
+                        end if;
+                    WHEN state_reset9 => target1010 <= SWITCHES(3 DOWNTO 0);
+                            ready_to_reset<='1';
+                            state <= reset_complete;
+                            leds(9 downto 0) <= "0000000001";
+                    WHEN others => state <= reset_complete;
+                        leds(9 downto 0) <= "0000000001";
+                    end case;
+                    B2_last <= '1';
+                end if;
+            elsif(B2='0') then
+                B2_last <= '0';
+            end if;
+        end if;
+    end process;
+    
+    process(ready_to_reset)
+    begin
+        if(ready_to_reset='1') then
+            target1 <= target11; 
+            target2 <= target22;
+            target3 <= target33;
+            target4 <= target44;
+            if(pwd_length=3) then
+            elsif(pwd_length=4) then
+                target5 <= target55;
+            elsif(pwd_length=5) then
+                target5 <= target55;
+                target6 <= target66;
+            elsif(pwd_length=6) then
+                target5 <= target55;
+                target6 <= target66;
+                target7 <= target77;
+            elsif(pwd_length=7) then
+                target5 <= target55;
+                target6 <= target66;
+                target7 <= target77;
+                target8 <= target88;
+            elsif(pwd_length=8) then
+                target5 <= target55;
+                target6 <= target66;
+                target7 <= target77;
+                target8 <= target88;
+                target9 <= target99;
+            elsif(pwd_length=9) then
+                target5 <= target55;
+                target6 <= target66;
+                target7 <= target77;
+                target8 <= target88;
+                target9 <= target99;
+                target10 <= target10;
+            end if;
+        end if;
+    end process;
+    
+    
+    process(state)
+    begin
+        if(state=state_passed) then
+            OK_or_Err <= "10";
+        elsif(state=state_not_passed) then
+            OK_or_Err <= "01";
+        elsif(state=init) then
+            OK_or_Err <= "00";
+            reset_verify_OK_or_Err <= "00";
+            reset_OK <= '0';
+        elsif(state=state_reset_wrong) then
+            reset_verify_OK_or_Err <= "10";  --reset verify error
+        elsif(state=state_pwd_length) then
+            reset_verify_OK_or_Err <= "01";  --reset verift OK
+        elsif(state=reset_complete) then
+            reset_OK <= '1';
+        else
+            OK_or_Err <= "00";
+            reset_verify_OK_or_Err <= "00";
+            reset_OK <= '0';
+        end if;
+    end process;
+
+    process(segment_control)
+    begin
+        if(OK_or_Err="10") then
+            case segment_control is
+            when 0 => DIGITS(7 downto 0)<="11111110"; SEGMENTS(6 downto 0)<="0001001";
+            when 1 => DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="1000000";
+            when 2 => DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="1111111";
+            end case;
+        elsif(OK_or_Err="01") then
+            case segment_control is
+            when 0 => DIGITS(7 downto 0)<="11111110"; SEGMENTS(6 downto 0)<="0101111";
+            when 1 => DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="0101111";
+            when 2 => DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="0000110";
+            end case;
+        elsif(reset_verify_OK_or_Err="01") then
+            case segment_control is
+            when 0 => DIGITS(7 downto 0)<="11111110"; SEGMENTS(6 downto 0)<="0001001";
+            when 1 => DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="1000000";
+            when 2 => DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="1111111";
+            end case;
+        elsif(reset_verify_OK_or_Err="10") then
+            case segment_control is
+            when 0 => DIGITS(7 downto 0)<="11111110"; SEGMENTS(6 downto 0)<="0101111";
+            when 1 => DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="0101111";
+            when 2 => DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="0000110";
+            end case;
+        elsif(reset_OK='1') then
+            case segment_control is
+            when 0 => DIGITS(7 downto 0)<="11111110"; SEGMENTS(6 downto 0)<="0001001";
+            when 1 => DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="1000000";
+            when 2 => DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="1111111";
+            end case;
+        else
+            case segment_control is
+            when 0 => 
+                 DIGITS(7 downto 0)<="11111110"; 
+                 case SWITCHES(3 downto 0) is
+                 when "0001" => SEGMENTS(6 downto 0)<= "1111001";   --1
+                 when "0010" => SEGMENTS(6 downto 0)<= "0100100";    --2
+                 when "0011" => SEGMENTS(6 downto 0)<= "0110000"; --3
+                 when "0100" => SEGMENTS(6 downto 0)<= "0011001";   --4
+                 when "0101" => SEGMENTS(6 downto 0)<= "0010010";  --5
+                 when "0110" => SEGMENTS(6 downto 0)<= "0000010";   --6
+                 when "0111" => SEGMENTS(6 downto 0)<= "1111000";  --7
+                 when "1000" => SEGMENTS(6 downto 0)<= "0000000";   --8
+                 when "1001" => SEGMENTS(6 downto 0)<= "0010000";  --9
+                 when "1010" => SEGMENTS(6 downto 0)<= "0001000";  --A
+                 when "1011" => SEGMENTS(6 downto 0)<= "0000011";  --b
+                 when "1100" => SEGMENTS(6 downto 0)<= "1000110"; --C
+                 when "1101" => SEGMENTS(6 downto 0)<= "0100001";  --d
+                 when "1110" => SEGMENTS(6 downto 0)<= "0000110";  --E
+                 when "1111" => SEGMENTS(6 downto 0)<= "0001110";  --F
+                 when others => SEGMENTS(6 downto 0)<= "1000000" ;   --0SEGMENTS(6 downto 0)<="1111111";
+                 end case;
+            when 1 => 
+                DIGITS(7 downto 0)<="11111101"; SEGMENTS(6 downto 0)<="1111111";
+                case SWITCHES(7 downto 4) is
+                 when "0001" => SEGMENTS(6 downto 0)<= "1111001";   --1
+                 when "0010" => SEGMENTS(6 downto 0)<= "0100100";    --2
+                 when "0011" => SEGMENTS(6 downto 0)<= "0110000"; --3
+                 when "0100" => SEGMENTS(6 downto 0)<= "0011001";   --4
+                 when "0101" => SEGMENTS(6 downto 0)<= "0010010";  --5
+                 when "0110" => SEGMENTS(6 downto 0)<= "0000010";   --6
+                 when "0111" => SEGMENTS(6 downto 0)<= "1111000";  --7
+                 when "1000" => SEGMENTS(6 downto 0)<= "0000000";   --8
+                 when "1001" => SEGMENTS(6 downto 0)<= "0010000";  --9
+                 when "1010" => SEGMENTS(6 downto 0)<= "0001000";  --A
+                 when "1011" => SEGMENTS(6 downto 0)<= "0000011";  --b
+                 when "1100" => SEGMENTS(6 downto 0)<= "1000110"; --C
+                 when "1101" => SEGMENTS(6 downto 0)<= "0100001";  --d
+                 when "1110" => SEGMENTS(6 downto 0)<= "0000110";  --E
+                 when "1111" => SEGMENTS(6 downto 0)<= "0001110";  --F
+                 when others => SEGMENTS(6 downto 0)<= "1000000" ;   --0SEGMENTS(6 downto 0)<="1111111";
+                 end case;
+            when 2 => 
+                DIGITS(7 downto 0)<="11111011"; SEGMENTS(6 downto 0)<="1111111";
+            end case;
+        end if;
+    end process;
+    
+    process(pwd_length_bits)
+    begin
+        if(true) then
+            case pwd_length_bits is
+            when "0000" => pwd_length <= 3;
+            when "0001" => pwd_length <= 3;
+            when "0010" => pwd_length <= 3;
+            when "0011" => pwd_length <= 3;
+            when "0100" => pwd_length <= 4;
+            when "0101" => pwd_length <= 5;
+            when "0110" => pwd_length <= 6;
+            when "0111" => pwd_length <= 7;
+            when "1000" => pwd_length <= 8;
+            when "1001" => pwd_length <= 9;
+            when others => pwd_length <= 9;
+            end case;
+        end if;
+    end process;
+
+end Behavioral;
